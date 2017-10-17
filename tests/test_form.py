@@ -36,7 +36,7 @@ def test_submit_online():
     assert data["custname"] == "Philip J. Fry"
     assert data["custtel"] == ""  # web browser submits "" for input left blank
     assert data["size"] == "medium"
-    assert data["topping"] == ["cheese", "onion"]
+    assert data["topping"] == "onion"
     assert data["comments"] == "freezer"
 
 

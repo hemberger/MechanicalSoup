@@ -39,27 +39,33 @@ class Form(object):
 
     def check(self, data):
         for (name, value) in data.items():
-            # Complain if we don't find the name, regardless of the
-            # value
+            # Complain if we don't find the name, regardless of the value
             inputs = self.form.find_all("input", {"name": name})
             if inputs == []:
                 raise LinkNotFoundError("No input checkbox named " + name)
-            type = inputs[0].attrs.get('type', 'text')
-            if type == "radio":
-                self.uncheck_all(name)
+
+            # We assume that all inputs with this name have the same type
+            if inputs[0].attrs.get('type', 'text') not in ("radio",
+                                                           "checkbox"):
+                raise LinkNotFoundError("Types must be radio or checkbox")
+
+            # For radio buttons, only one may be checked
+            # (Not so for checkboxes, but assume only specified are desired)
+            self.uncheck_all(name)
 
             # Accept individual values (int, str)
             # We just wrap them in a 1-value tuple.
             if not isinstance(value, list) and not isinstance(value, tuple):
                 value = (value,)
             for choice in value:
-                choice = str(choice)  # Allow for example literal numbers
+                choice_str = str(choice)  # Allow for example literal numbers
                 for i in inputs:
-                    if i.attrs.get("value", "on") == choice:
+                    if i.attrs.get("value", "on") == choice_str or choice is True:
                         i["checked"] = ""
                         break
                 else:
                     print(self.form)
+                    # TODO: this should not be excepted
                     raise LinkNotFoundError(
                         "No input checkbox named %s with choice %s" %
                         (name, choice)
@@ -72,39 +78,41 @@ class Form(object):
                 raise LinkNotFoundError("No textarea named " + name)
             t.string = value
 
-    def __setitem__(self, name, value):
-        return self.set(name, value)
-
-    def set(self, name, value, force=False):
-        input = self.form.find("input", {"name": name})
-        if input:
-            if input.attrs.get('type', 'text') in ("radio", "checkbox"):
-                if value is True:
-                    # f["foo"] = True checks the box foo
-                    input.attrs["checked"] = ""
-                elif value is False:
-                    # f["foo"] = False unchecks it
-                    if "checked" in input.attrs:
-                        del input.attrs["checked"]
-                else:
-                    if isinstance(value, list) or isinstance(value, tuple):
-                        self.uncheck_all(name)
-                    self.check({name: value})
-            else:
-                input["value"] = value
-            return
-        textarea = self.form.find("textarea", {"name": name})
-        if textarea:
-            textarea.string = value
-            return
-        select = self.form.find("select", {"name": name})
-        if select:
+    def select(self, data):
+        for (name, value) in data.items():
+            select = self.form.find("select", {"name": name})
+            if not select:
+                raise LinkNotFoundError("No select named " + name)
             for option in select.find_all("option"):
                 if "selected" in option.attrs:
                     del option.attrs["selected"]
             o = select.find("option", {"value": value})
             o.attrs["selected"] = "selected"
+
+    def __setitem__(self, name, value):
+        return self.set(name, value)
+
+    def set(self, name, value, force=False):
+        try:
+            self.check({name: value})
             return
+        except LinkNotFoundError:
+            pass
+        try:
+            self.input({name: value})
+            return
+        except LinkNotFoundError:
+            pass
+        try:
+            self.textarea({name: value})
+            return
+        except LinkNotFoundError:
+            pass
+        try:
+            self.select({name: value})
+            return
+        except LinkNotFoundError:
+            pass
         if force:
             self.new_control('input', name, value=value)
             return
